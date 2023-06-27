@@ -1,118 +1,277 @@
-import Image from 'next/image'
-import { Inter } from 'next/font/google'
+import { io, type Socket } from "socket.io-client";
+import { Inter } from "next/font/google";
+import { useEffect, useRef, useState } from "react";
+import { ClientToServerEvents, ServerToClientEvents } from "@/types/socket-type";
+import useTyping from "@/hooks/useTyping";
 
-const inter = Inter({ subsets: ['latin'] })
+const inter = Inter({ subsets: ["latin"] });
+
+type Message = {
+  author: string;
+  message: string;
+};
+
+export let socket: Socket<ServerToClientEvents, ClientToServerEvents> | null = null;
 
 export default function Home() {
+  // const [message, setMessage] = useState("");
+  // const [author, setAuthor] = useState("");
+  // const [allMessages, setAllMessages] = useState<Message[]>([]);\
+  const [username, setUsername] = useState("");
+  const [room, setRoom] = useState("");
+  const [chosenUsername, setChosenUsername] = useState("");
+  const [message, setMessage] = useState("");
+  const [messages, setMessages] = useState<Message[]>([]);
+
+  // typing
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
+
+  const { isTyping, startTyping, stopTyping, cancelTyping } = useTyping();
+
+  const messagesEndRef = useRef<null | HTMLDivElement>(null);
+
+  useEffect(() => {
+    socketInitializer();
+
+    async function socketInitializer() {
+      await fetch("/api/socket");
+
+      socket = io({
+        path: "/api/socket_io",
+      });
+    }
+
+    return () => {
+      socket?.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    socket?.on("NEW_INCOMING_MESSAGE_EVENT", (msg) => {
+      setMessages((currentMsg) => [...currentMsg, { author: msg.author, message: msg.message }]);
+      console.log(messages);
+    });
+
+    socket?.on("USER_HAS_JOINED_EVENT", (msg) => {
+      setMessages((currentMsg) => [...currentMsg, { author: "", message: msg }]);
+    });
+
+    socket?.on("START_TYPING_MESSAGE_EVENT", (typingInfo: Message) => {
+      const user = typingInfo.author;
+      setTypingUsers((users) => [...users, user]);
+    });
+
+    socket?.on("STOP_TYPING_MESSAGE_EVENT", (typingInfo: Message) => {
+      const user = typingInfo.author;
+      setTypingUsers((users) => users.filter((u) => u !== user));
+    });
+  }, [socket]);
+
+  const sendMessage = async () => {
+    socket?.emit("CREATED_MESSAGE", { author: chosenUsername, message, room });
+    cancelTyping();
+    setMessages((currentMsg) => [...currentMsg, { author: chosenUsername, message }]);
+    setMessage("");
+  };
+
+  const startTypingMessage = () => {
+    if (!socket) return;
+    socket.emit("START_TYPING_MESSAGE_EVENT", {
+      author: chosenUsername,
+      message: "",
+      room,
+    });
+  };
+
+  const stopTypingMessage = () => {
+    if (!socket) return;
+    socket.emit("STOP_TYPING_MESSAGE_EVENT", {
+      author: chosenUsername,
+      message: "",
+      room,
+    });
+  };
+
+  const handleKeypress = (e: any) => {
+    //it triggers by pressing the enter key
+    if (e.keyCode === 13) {
+      if (message) {
+        sendMessage();
+      }
+    }
+  };
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  useEffect(() => {
+    if (isTyping) startTypingMessage();
+    else stopTypingMessage();
+  }, [isTyping]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages.length + typingUsers.length]);
+
+  // ***********************************************************//
+  // from https://betterprogramming.pub/socket-io-and-nextjs-build-real-time-chat-application-part-1-976555ecba
+
   return (
-    <main
-      className={`flex min-h-screen flex-col items-center justify-between p-24 ${inter.className}`}
-    >
-      <div className="z-10 w-full max-w-5xl items-center justify-between font-mono text-sm lg:flex">
-        <p className="fixed left-0 top-0 flex w-full justify-center border-b border-gray-300 bg-gradient-to-b from-zinc-200 pb-6 pt-8 backdrop-blur-2xl dark:border-neutral-800 dark:bg-zinc-800/30 dark:from-inherit lg:static lg:w-auto  lg:rounded-xl lg:border lg:bg-gray-200 lg:p-4 lg:dark:bg-zinc-800/30">
-          Get started by editing&nbsp;
-          <code className="font-mono font-bold">src/pages/index.tsx</code>
-        </p>
-        <div className="fixed bottom-0 left-0 flex h-48 w-full items-end justify-center bg-gradient-to-t from-white via-white dark:from-black dark:via-black lg:static lg:h-auto lg:w-auto lg:bg-none">
-          <a
-            className="pointer-events-none flex place-items-center gap-2 p-8 lg:pointer-events-auto lg:p-0"
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            By{' '}
-            <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className="dark:invert"
-              width={100}
-              height={24}
-              priority
+    <div className="flex items-center p-4 mx-auto min-h-screen justify-center bg-purple-500">
+      <main className="gap-4 flex flex-col items-center justify-center w-full h-full">
+        {!chosenUsername ? (
+          <>
+            <h3 className="font-bold text-white text-xl">How people should call you?</h3>
+            <input
+              type="text"
+              placeholder="Identity..."
+              value={username}
+              className="p-3 rounded-md outline-none"
+              onChange={(e) => setUsername(e.target.value)}
             />
-          </a>
-        </div>
-      </div>
+            <input
+              type="text"
+              placeholder="JOIN ROOM"
+              value={room}
+              className="p-3 rounded-md outline-none"
+              onChange={(e) => setRoom(e.target.value)}
+            />
+            <button
+              onClick={() => {
+                // join room
+                socket?.emit("JOIN_ROOM_EVENT", room);
+                setChosenUsername(username);
+              }}
+              className="bg-white rounded-md px-4 py-2 text-xl"
+            >
+              Go!
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="font-bold text-white text-xl">Your username: {username}</p>
+            <div className="flex flex-col justify-end bg-white h-[20rem] min-w-[33%] rounded-md shadow-md ">
+              <div className="h-full last:border-b-0 overflow-y-scroll">
+                {messages.map((msg, i) => {
+                  return (
+                    <div className="w-full py-1 px-2 border-b border-gray-200" key={i}>
+                      {msg.author} : {msg.message}
+                    </div>
+                  );
+                })}
 
-      <div className="relative flex place-items-center before:absolute before:h-[300px] before:w-[480px] before:-translate-x-1/2 before:rounded-full before:bg-gradient-radial before:from-white before:to-transparent before:blur-2xl before:content-[''] after:absolute after:-z-20 after:h-[180px] after:w-[240px] after:translate-x-1/3 after:bg-gradient-conic after:from-sky-200 after:via-blue-200 after:blur-2xl after:content-[''] before:dark:bg-gradient-to-br before:dark:from-transparent before:dark:to-blue-700/10 after:dark:from-sky-900 after:dark:via-[#0141ff]/40 before:lg:h-[360px]">
-        <Image
-          className="relative dark:drop-shadow-[0_0_0.3rem_#ffffff70] dark:invert"
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
-        />
-      </div>
+                {typingUsers.map((user, i) => (
+                  <div className="w-full py-1 px-2 border-b border-gray-200 flex" key={i}>
+                    <span className="font-bold">{user}</span> is typing...
+                    <div className="dotsContainer">
+                      <span id="dot1"></span>
+                      <span id="dot2"></span>
+                      <span id="dot3"></span>
+                    </div>
+                  </div>
+                ))}
+                <div ref={messagesEndRef} />
+              </div>
+              <div className="border-t border-gray-300 w-full flex rounded-bl-md">
+                <input
+                  type="text"
+                  placeholder="New message..."
+                  value={message}
+                  className="outline-none py-2 px-2 rounded-bl-md flex-1"
+                  onChange={(e) => setMessage(e.target.value)}
+                  // onKeyUp={handleKeypress}
+                  onKeyDown={startTyping}
+                  onKeyUp={(e) => {
+                    stopTyping();
+                    //it triggers by pressing the enter key
+                    if (e.key === "Enter") {
+                      if (message) {
+                        sendMessage();
+                      }
+                    }
+                  }}
+                />
+                <div className="border-l border-gray-300 flex justify-center items-center  rounded-br-md group hover:bg-purple-500 transition-all">
+                  <button
+                    className="group-hover:text-white px-3 h-full"
+                    onClick={() => {
+                      sendMessage();
+                    }}
+                  >
+                    Send
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </main>
+    </div>
+  );
 
-      <div className="mb-32 grid text-center lg:mb-0 lg:grid-cols-4 lg:text-left">
-        <a
-          href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Docs{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Find in-depth information about Next.js features and API.
-          </p>
-        </a>
+  // ***********************************************************//
+  // from https://github.com/SarathAdhi/socket.io-starter-template
 
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Learn{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Learn about Next.js in an interactive course with&nbsp;quizzes!
-          </p>
-        </a>
+  // useEffect(() => {
+  //   socket?.on("RECEIVE_MESSAGE_EVENT", (data) => {
+  //     setAllMessages((pre) => [...pre, data]);
+  //   });
+  // }, [socket]);
 
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Templates{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Discover and deploy boilerplate example Next.js&nbsp;projects.
-          </p>
-        </a>
+  // function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  //   e.preventDefault();
 
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Deploy{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
-      </div>
-    </main>
-  )
+  //   console.log("emitted");
+
+  //   socket?.emit("SEND_MESSAGE_EVENT", {
+  //     author,
+  //     message,
+  //   });
+  //   setMessage("");
+  // }
+
+  // return (
+  //   <main className="flex flex-col items-center justify-center min-h-screen py-2">
+  //     <h1 className="text-4xl font-bold text-center">Chat app</h1>
+  //     <h1 className="text-2xl font-bold text-center">Enter a username</h1>
+
+  //     <input
+  //       className="rounded-lg p-2 m-2 bg-gray-200"
+  //       value={author}
+  //       onChange={(e) => setAuthor(e.target.value)}
+  //     />
+
+  //     <br />
+  //     <br />
+
+  //     <div className="flex flex-col items-center justify-center w-full flex-1 px-20 text-center">
+  //       {allMessages.map(({ author, message }, index) => (
+  //         <div className="bg-gray-200 rounded-lg p-2 m-2" key={index}>
+  //           {author}: {message}
+  //         </div>
+  //       ))}
+
+  //       <br />
+
+  //       <form
+  //         onSubmit={handleSubmit}
+  //         className="flex flex-col items-center justify-center w-full flex-1 px-20 text-center"
+  //       >
+  //         <input
+  //           className="rounded-lg p-2 m-2 bg-gray-200"
+  //           name="message"
+  //           placeholder="enter your message"
+  //           value={message}
+  //           onChange={(e) => setMessage(e.target.value)}
+  //           autoComplete={"off"}
+  //         />
+  //       </form>
+  //     </div>
+  //   </main>
+  // );
 }

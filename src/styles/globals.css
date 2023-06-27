@@ -2,26 +2,53 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 214, 219, 220;
-  --background-end-rgb: 255, 255, 255;
+.dotsContainer {
+  width: 60px;
+  height: 25px;
+  background: #f2f2f2;
+  border-radius: 25px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --foreground-rgb: 255, 255, 255;
-    --background-start-rgb: 0, 0, 0;
-    --background-end-rgb: 0, 0, 0;
+#dot1,
+#dot2,
+#dot3 {
+  width: 7px;
+  height: 7px;
+  background: #cacaca;
+  border-radius: 50%;
+  margin: 3px;
+  transition: all 0.5s ease-in-out;
+  animation: typing 1s infinite;
+}
+
+#dot1 {
+  animation-delay: 1s;
+}
+
+#dot2 {
+  animation-delay: 0.5s;
+}
+
+#dot3 {
+  animation-delay: 0.8s;
+}
+
+@keyframes typing {
+  0% {
+    transform: translateY(0);
+    transition: all 0.5s ease-in-out;
   }
-}
 
-body {
-  color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
+  50% {
+    transform: translateY(-5px);
+    transition: all 0.5s ease-in-out;
+  }
+
+  100% {
+    transform: translateY(0);
+    transition: all 0.5s ease-in-out;
+  }
 }
