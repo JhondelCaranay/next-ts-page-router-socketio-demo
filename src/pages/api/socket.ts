@@ -5,6 +5,7 @@ import {
   ServerToClientEvents,
   SocketData,
 } from "@/types/socket-type";
+import typingUserHandlers from "@/utils/socket-handler/typingUserHandlers";
 import type { NextApiRequest } from "next";
 import { Server } from "socket.io";
 
@@ -43,13 +44,16 @@ export default function handler(req: NextApiRequest, res: NextApiResponseWithSoc
         socket.to(msg.room).emit("NEW_INCOMING_MESSAGE_EVENT", msg);
       });
 
+      // handlers 
+      typingUserHandlers(io, socket);
+
       // Listen typing events
-      socket.on("START_TYPING_MESSAGE_EVENT", (data) => {
-        io.in(data.room).emit("START_TYPING_MESSAGE_EVENT", data);
-      });
-      socket.on("STOP_TYPING_MESSAGE_EVENT", (data) => {
-        io.in(data.room).emit("STOP_TYPING_MESSAGE_EVENT", data);
-      });
+      // socket.on("START_TYPING_MESSAGE_EVENT", (data) => {
+      //   io.in(data.room).emit("START_TYPING_MESSAGE_EVENT", data);
+      // });
+      // socket.on("STOP_TYPING_MESSAGE_EVENT", (data) => {
+      //   io.in(data.room).emit("STOP_TYPING_MESSAGE_EVENT", data);
+      // });
 
       // socket.on("SEND_MESSAGE_EVENT", (obj) => {
       //   io.emit("RECEIVE_MESSAGE_EVENT", obj);
